@@ -32,15 +32,12 @@ public class Homo {
 
 		System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
 
-		String bookObject = "/home/hizukuri/Pictures/CIMG0046.JPG";
-		String bookScene = "/home/hizukuri/Pictures/CIMG0045.JPG";
+		String bookObject = "/home/hizukuri/Pictures/CIMG0053.JPG";
+		String bookScene = "/home/hizukuri/Pictures/CIMG0054.JPG";
 
 
 		System.out.println("Started....");
 		System.out.println("Loading images...");
-
-
-
 		//Mat readi = Highgui.imread(bookObject, Highgui.CV_LOAD_IMAGE_COLOR);
 		//Mat objectImage = new Mat(readi, new Rect(new double[] {100,200,200,200}));
 		Mat objectImage = Highgui.imread(bookObject, Highgui.CV_LOAD_IMAGE_COLOR);
@@ -57,7 +54,7 @@ public class Homo {
 		//		Imgproc.cvtColor(objectImage, gray_img2, Imgproc.COLOR_RGBA2GRAY);
 
 
-		Highgui.imwrite("./imgs/output/zentai.jpg", tmp(objectImage, sceneImage, 1000, 1000, 500, 500));
+		Highgui.imwrite("./imgs/output/zentai.jpg", tmp(objectImage, sceneImage, 500, 500, 500, 500));
 	}
 
 
@@ -79,36 +76,58 @@ public class Homo {
 
 		int i = 0;
 		int j = 50;
-		int h = height;
+		int w=width;
 		boolean flagx = true;
 		boolean flagy = true;
 		Rect box;
 
-		while(i<present.cols()){
+		while(i<present.cols()||flagx){
+			if(i+width>present.cols()){
+				w=present.cols()-i;
+				flagx=false;
+			}
 			j=0;
-			int w=width;
+			int h = height;
 			flagy=true;
 			while(j<present.rows()&&flagy){
-				
+
 				if(j+height>present.rows()){
-					w=present.rows()-j;
+					h=present.rows()-j;
 					flagy=false;
-					
+
 				}
 				System.out.println(i+" "+ j +" "+w+" "+h);
 				box = new Rect(new double[] {i,j,w,h});
 				//ターゲット画像の切り出し
 				target = new Mat(present,box);
-				//Highgui.imwrite("./imgs/output/target.jpg", target);
+				
 				//対応画像の切り出し
-				Mat tmp = match(target,past);
-				//ターゲット画像と対応画像の差分
-				Mat diff = imageDiff(target, tmp);
-				//ベース画像の位置
-				Mat Roi= new Mat(baseimg, box);
-				//画像の貼り付け
-				diff.copyTo(Roi);
-				//画像の左上角のy座標増
+				Mat tmp = new Mat();
+				//マッチングの結果があるなら
+				if(match(target,past,tmp, i,j)){
+					//ターゲット画像と対応画像の差分
+					if(i==0&&j==1500){
+						Highgui.imwrite("./imgs/output/target.jpg", target);
+						Highgui.imwrite("./imgs/output/tmp.jpg", tmp);
+					}
+					Mat diff = imageDiff(target, tmp);
+					//Highgui.imwrite("./imgs/output/"+ i+"-"+j+".jpg", diff);
+					//ベース画像の位置
+					Mat Roi= new Mat(baseimg, box);
+					//画像の貼り付け
+					diff.copyTo(Roi);
+					//画像の左上角のy座標増
+				}else{
+					Mat a = new Mat(past,box);
+					Mat diff = imageDiff(target, a);
+					//Highgui.imwrite("./imgs/output/"+ i+"-"+j+".jpg", diff);
+					//ベース画像の位置
+					Mat Roi= new Mat(baseimg, box);
+					//画像の貼り付け
+					diff.copyTo(Roi);
+					//画像の左上角のy座標増
+				
+				}
 				j= j+y;
 			}
 			//画像の左上角のx座標増
@@ -123,8 +142,8 @@ public class Homo {
 	 * @param sceneImage  シーンのmat
 	 * @return
 	 */
-	public static Mat match(Mat objectImage, Mat sceneImage){
-		Mat result = new Mat();
+	public static boolean match(Mat objectImage, Mat sceneImage, Mat dst, int in, int jn){
+
 
 		System.out.println("Started....");
 		System.out.println("Loading images...");
@@ -182,7 +201,7 @@ public class Homo {
 		}
 
 		System.out.println(goodMatchesList.size());
-		if (goodMatchesList.size() >= 7) {
+		if (goodMatchesList.size() >= 10) {
 			System.out.println("Object Found!!!");
 
 			List<KeyPoint> objKeypointlist = objectKeyPoints.toList();
@@ -209,19 +228,21 @@ public class Homo {
 
 			Features2d.drawMatches(objectImage, objectKeyPoints, sceneImage, sceneKeyPoints, goodMatches, matchoutput, matchestColor, newKeypointColor, new MatOfByte(), 2);
 
-			//Highgui.imwrite("./imgs/output/outputImage.jpg", outputImage);
-			//Highgui.imwrite("./imgs/output/matchoutput.jpg", matchoutput);
-
+			if(in == 0 && jn ==1500){
+			Highgui.imwrite("./imgs/output/outputImage.jpg", outputImage);
+			Highgui.imwrite("./imgs/output/matchoutput.jpg", matchoutput);
+			}
 			Size s = new Size(objectImage.cols(),objectImage.rows());
 
-			Imgproc.warpPerspective(sceneImage, result, homography, s);
+			Imgproc.warpPerspective(sceneImage, dst, homography, s);
 
 		} else {
 			System.out.println("Object Not Found");
+			return false;
 		}
 
 		System.out.println("Ended....");
-		return result;
+		return true;
 	}
 
 	public static Mat imageDiff(Mat src1, Mat src2){
