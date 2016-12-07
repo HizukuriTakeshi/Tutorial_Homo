@@ -32,8 +32,8 @@ public class Homo {
 
 		System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
 
-		String bookObject = "/home/hizukuri/Pictures/CIMG0053.JPG";
-		String bookScene = "/home/hizukuri/Pictures/CIMG0054.JPG";
+		String bookObject = "/home/hizukuri/Pictures/CIMG0056.JPG";
+		String bookScene = "/home/hizukuri/Pictures/CIMG0057.JPG";
 
 
 		System.out.println("Started....");
@@ -42,34 +42,40 @@ public class Homo {
 		//Mat objectImage = new Mat(readi, new Rect(new double[] {100,200,200,200}));
 		Mat objectImage = Highgui.imread(bookObject, Highgui.CV_LOAD_IMAGE_COLOR);
 		Mat sceneImage = Highgui.imread(bookScene, Highgui.CV_LOAD_IMAGE_COLOR);
+		
 		if(objectImage.empty() || sceneImage.empty()){
-			System.out.println("!!!!!!");
+			System.out.println("File Not found!");
 		}
 
-
-		//		Mat cut = match(objectImage, sceneImage);
-		//		Mat gray_img1 = new Mat();
-		//		Mat gray_img2 = new Mat();
-		//		Imgproc.cvtColor(cut, gray_img1, Imgproc.COLOR_RGBA2GRAY);
-		//		Imgproc.cvtColor(objectImage, gray_img2, Imgproc.COLOR_RGBA2GRAY);
-
-
-		Highgui.imwrite("./imgs/output/zentai.jpg", tmp(objectImage, sceneImage, 500, 500, 500, 500));
+		Mat result = createPartSub(objectImage, sceneImage, 500, 500, 500, 500);
+		Highgui.imwrite("./imgs/output/sabun.jpg", result);
+		
+		Imgproc.threshold(result, result, /*127*/0.0,255.0,Imgproc.THRESH_BINARY | Imgproc.THRESH_OTSU);
+		//ノイズ除去
+		Imgproc.erode(result, result, new Mat(), new Point(-1,-1), 1);
+		//欠損部補完
+		Imgproc.dilate(result, result, new Mat());
+		Highgui.imwrite("./imgs/output/zentai.jpg", result);
+		
+		Mat a = new Mat();
+		match(sceneImage, objectImage, a);
+		Highgui.imwrite("./imgs/output/zentai2.jpg", a);
 	}
 
 
 	/**
 	 * @param past 過去の写真(ホモグラフィ変形後)
 	 * @param src2　現在の写真
-	 * @param width
-	 * @param height
-	 * @param x
-	 * @param y
+	 * @param width 部分差分画像の横幅
+	 * @param height　部分差分画像の縦幅
+	 * @param x 差分画像のx移動 今のところx,yのパラメータはwidthとheightと同じにする(重なり部分の処理未実装のため)
+	 * @param y 差分画像のy移動 
 	 * @return
 	 */
-	public static Mat tmp(Mat past, Mat present, int width, int height, int x, int y){
+	public static Mat createPartSub(Mat past, Mat present, int width, int height, int x, int y){
 		//結果出力用mat
-		Mat baseimg = new Mat(new Size(present.cols(),present.rows()),0);
+		Mat baseimg = imageDiff(past, present);
+	
 		//作業用mat
 		Mat target = new Mat();
 
@@ -100,33 +106,18 @@ public class Homo {
 				box = new Rect(new double[] {i,j,w,h});
 				//ターゲット画像の切り出し
 				target = new Mat(present,box);
-				
+
 				//対応画像の切り出し
 				Mat tmp = new Mat();
 				//マッチングの結果があるなら
-				if(match(target,past,tmp, i,j)){
+				if(match(target,past,tmp)){
 					//ターゲット画像と対応画像の差分
-					if(i==0&&j==1500){
-						Highgui.imwrite("./imgs/output/target.jpg", target);
-						Highgui.imwrite("./imgs/output/tmp.jpg", tmp);
-					}
 					Mat diff = imageDiff(target, tmp);
-					//Highgui.imwrite("./imgs/output/"+ i+"-"+j+".jpg", diff);
 					//ベース画像の位置
 					Mat Roi= new Mat(baseimg, box);
 					//画像の貼り付け
 					diff.copyTo(Roi);
 					//画像の左上角のy座標増
-				}else{
-					Mat a = new Mat(past,box);
-					Mat diff = imageDiff(target, a);
-					//Highgui.imwrite("./imgs/output/"+ i+"-"+j+".jpg", diff);
-					//ベース画像の位置
-					Mat Roi= new Mat(baseimg, box);
-					//画像の貼り付け
-					diff.copyTo(Roi);
-					//画像の左上角のy座標増
-				
 				}
 				j= j+y;
 			}
@@ -142,7 +133,7 @@ public class Homo {
 	 * @param sceneImage  シーンのmat
 	 * @return
 	 */
-	public static boolean match(Mat objectImage, Mat sceneImage, Mat dst, int in, int jn){
+	public static boolean match(Mat objectImage, Mat sceneImage, Mat dst){
 
 
 		System.out.println("Started....");
@@ -183,7 +174,7 @@ public class Homo {
 		System.out.println("Matching object and scene images...");
 		descriptorMatcher.knnMatch(objectDescriptors, sceneDescriptors, matches, 2);
 
-		System.out.println("Calculating good match list...");
+		//System.out.println("Calculating good match list...");
 		LinkedList<DMatch> goodMatchesList = new LinkedList<DMatch>();
 
 		float nndrRatio = 0.7f;
@@ -201,7 +192,7 @@ public class Homo {
 		}
 
 		System.out.println(goodMatchesList.size());
-		if (goodMatchesList.size() >= 10) {
+		if (goodMatchesList.size() >= 20) {
 			System.out.println("Object Found!!!");
 
 			List<KeyPoint> objKeypointlist = objectKeyPoints.toList();
@@ -228,10 +219,6 @@ public class Homo {
 
 			Features2d.drawMatches(objectImage, objectKeyPoints, sceneImage, sceneKeyPoints, goodMatches, matchoutput, matchestColor, newKeypointColor, new MatOfByte(), 2);
 
-			if(in == 0 && jn ==1500){
-			Highgui.imwrite("./imgs/output/outputImage.jpg", outputImage);
-			Highgui.imwrite("./imgs/output/matchoutput.jpg", matchoutput);
-			}
 			Size s = new Size(objectImage.cols(),objectImage.rows());
 
 			Imgproc.warpPerspective(sceneImage, dst, homography, s);
@@ -249,17 +236,12 @@ public class Homo {
 		Mat result = new Mat();
 		Mat gray_img1 = new Mat();
 		Mat gray_img2 = new Mat();
+		//グレースケールに変換
 		Imgproc.cvtColor(src1, gray_img1, Imgproc.COLOR_RGBA2GRAY);
 		Imgproc.cvtColor(src2, gray_img2, Imgproc.COLOR_RGBA2GRAY);
 
 		//差分
 		Core.absdiff(gray_img1, gray_img2, result);
-		//しきい値
-		Imgproc.threshold(result, result, /*127*/0.0,255.0,Imgproc.THRESH_BINARY | Imgproc.THRESH_OTSU);
-		//ノイズ除去
-		Imgproc.erode(result, result, new Mat(), new Point(-1,-1), 1);
-		//欠損部補完
-		Imgproc.dilate(result, result, new Mat());
 		return result;
 	}
 
